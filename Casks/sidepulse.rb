@@ -46,8 +46,8 @@ cask "sidepulse" do
               must_succeed: false,
             }
 
-  zap trash:  "~/Library/Preferences/com.gourneau.SidePulse.plist",
-      delete: "/etc/sudoers.d/sidepulse-disablesleep"
+  zap delete: "/etc/sudoers.d/sidepulse-disablesleep",
+      trash:  "~/Library/Preferences/com.gourneau.SidePulse.plist"
 
   caveats <<~EOS
     SidePulse needs SidePulse Pro or SidePulse Dot hardware to do anything:
