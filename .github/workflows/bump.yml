@@ -1,0 +1,52 @@
+name: Bump cask
+
+# Polls the app repo for a new release and updates the cask.
+#
+# Deliberately driven from this repo rather than pushed from the app repo: the
+# app has two release paths (a local script and a tag-triggered workflow), and
+# pushing from either would need a personal access token stored as a secret in
+# the app repo. Polling needs nothing but this repo's own GITHUB_TOKEN, and it
+# covers both paths identically.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update to the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh api repos/gourneau/sidepulse/releases/latest --jq .tag_name)
+          version="${tag#v}"
+          current=$(sed -n 's/^  version "\(.*\)"$/\1/p' Casks/sidepulse.rb)
+          if [ "$version" = "$current" ]; then
+            echo "already at $version"; exit 0
+          fi
+
+          # Hash the asset that was actually published. `ditto -c -k` is not
+          # byte-reproducible, so hashing a local rebuild would give a checksum
+          # that does not match what users download.
+          url="https://github.com/gourneau/sidepulse/releases/download/${tag}/SidePulse.zip"
+          if ! curl -fsSL "$url" -o asset.zip; then
+            echo "::error::no SidePulse.zip asset at ${tag}"; exit 1
+          fi
+          sha=$(shasum -a 256 asset.zip | awk '{print $1}')
+          rm -f asset.zip
+
+          sed -i -e "s|^  version \".*\"$|  version \"${version}\"|" \
+                 -e "s|^  sha256 \".*\"$|  sha256 \"${sha}\"|" Casks/sidepulse.rb
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "sidepulse ${version}"
+          git push
